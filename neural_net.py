@@ -1,100 +1,8 @@
 import numpy as np
-
-class Activation(object):
-    def __init__(self, name, activ, deriv):
-        self.name = name
-        self.activation = activ
-        self.derivative = deriv
-
-    def __call__(self, X, differentiate=False):
-        if differentiate:
-            return self.derivative(X)
-        else:
-            return self.activation(X)
-
-IDENTITY = Activation(
-    'identity',
-    lambda x: x,
-    np.vectorize(lambda x: 0)
-)
-    
-TANH = Activation(
-    'tanh',
-    np.vectorize(
-        lambda x: np.tanh(x)
-    ),
-    np.vectorize(
-        lambda x: 1 - np.tanh(x)**2
-    )
-)
-
-SIGMOID = Activation(
-    'sigmoid',
-    np.vectorize(
-        lambda x: np.exp(x) / (np.exp(x) + 1)
-    ),
-    np.vectorize(
-        lambda x: -np.exp(-x) / (np.exp(-x) + 1)**2
-    )
-)
-
-def get_activation(activation: str):
-    if activation == 'tanh':
-        return TANH
-    elif activation == 'sigmoid':
-        return SIGMOID
-    elif activation == 'identity':
-        return IDENTITY
-    else:
-        raise Exception('Unrecognized activation %s' % activation)
-
-    
-class Loss(object):
-    def __init__(self, name, func, deriv):
-        self.name = name
-        self.function = func
-        self.derivative = deriv
-
-    def __call__(self, y, yhat, differentiate=False):
-        if differentiate:
-            return self.derivative(y - yhat)
-        else:
-            return self.function(y - yhat)
-
-MSE = Loss(
-    'mse',
-    lambda x: np.mean(x**2),
-    lambda x: 2*x
-)
-
-def get_loss(loss: str):
-    if loss == 'mse':
-        return MSE
-    else:
-        raise Exception('Unrecognized loss %s' % activation)
-
-
-class Optimizer(object):
-    def __init__(self, name):
-        self.name = name
-
-    def update(self, target, direction):
-        raise NotImplementedError()
-
-
-class SGD(Optimizer):
-    def __init__(self, learning_rate):
-        self.lr = learning_rate
-
-    def update(self, target, direction):
-        return target - self.lr * direction
-
-
-def get_optimizer(optimizer: str):
-    if optimizer == 'sgd':
-        return SGD(learning_rate=0.1)
-    else:
-        raise Exception('Unrecognized optimizer %s' % optimizer)
+from activations import get_activation
+from losses import get_loss
+from optimizers import get_optimizer
+from preprocessing import make_batches, sum_matricies
     
 class NeuralNetwork(object):
     def __init__(self, input_size):
@@ -170,11 +78,6 @@ class NeuralNetwork(object):
         # where the entries are the partial derivatives with respect
         # to the loss.
 
-        # print([a.shape for a in activations])
-        # print([ld.shape for ld in local_derivatives])
-        # print([l['weights'].shape for l in self.layers])
-        # print(loss.shape)
-
         activations = activations[:-1]
         
         delta = [np.multiply(local_derivatives[-1], loss)]
@@ -203,89 +106,65 @@ class NeuralNetwork(object):
             self.optimizer = get_optimizer(optimizer)
         self.compiled = True
 
-    def fit(self, X, y, epochs: int=1):
+    def fit(
+            self,
+            X, y,
+            epochs: int=1,
+            batch_size: int=None
+    ):
         if not self.compiled:
             raise Exception('Model must be compiled prior to training')
+
+        if not len(X) == len(y):
+            # Assert that the inputs and targets have same first
+            # dimension.
+            raise Exception(
+                'X length %d does not match y length %d.' % (
+                    len(X), len(y)
+                )
+            )
+
+        # Handle mini-batching
+        if batch_size is None:
+            batch_size = len(X)
+        batches = make_batches(X, y, batch_size)
         
         for epoch in range(1, epochs + 1):
-            out, activations, local_derivatives = self._feed_forward(X, training=True)
-            loss = self.loss(out, y, differentiate=True)
-            derivatives = self._back_prop(
-                loss, activations, local_derivatives
-            )
+            for batch in batches:
+                batch_derivatives = []
+                for xy in batch:
+                    x, y = xy[0], xy[1]
+                    # TODO: Vectorize (i.e. run samples all at once)
+                    # Batches can be parallized.
+                    out, act, ld = self._feed_forward(
+                        x, training=True
+                    )
+                    loss = self.loss(out, y, differentiate=True)
+                    derivatives = self._back_prop(
+                        loss, act, ld
+                    )
+                    batch_derivatives.append(derivatives)
+
+                derivatives = sum_matricies(batch_derivatives)
             
-            for ii, layer in enumerate(self.layers):
-                layer['weights'] = optimizer.update(
-                    layer['weights'], derivatives[ii]
-                )
+                for ii, layer in enumerate(self.layers):
+                    layer['weights'] = optimizer.update(
+                        layer['weights'], derivatives[ii]
+                    )
 
         return
 
     def predict(self, X):
         return self._feed_forward(X, training=False)
 
-
-def run_tests():
-    passed_tests = 0
-    failed_tests = 0
-
-def test1(p, f, seed: int=None):
-    """
-    Verifies that backpropogation correctly computes the derivatives of
-    a small network.
-    """
-    if seed is not None:
-        np.random.seed(seed)
-
-    nn = NeuralNetwork(1)
-    nn.add_layer(2, 'tanh', bias=False)
-    nn.add_layer(1, 'tanh', bias=False)
-
-    optimizer = SGD(learning_rate=0.00)
-    nn.compile('mse', optimizer)
-
-    i = 1
-
-    o, a, ld = nn._feed_forward(np.array([1]), training=True)
-    l = nn.loss(o, [i], differentiate=True)
-    d = nn._back_prop(l, a, ld)
-
-    w11 = nn.layers[0]['weights'][0][0]
-    w12 = nn.layers[0]['weights'][0][1]
-    w21 = nn.layers[1]['weights'][0][0]
-    w22 = nn.layers[1]['weights'][1][0]
-    outp = l * (1 - np.tanh(w21 * np.tanh(w11 * 1) + w22 * np.tanh(w12 * 1))**2)
-
-    D = [
-            np.array([[
-                (outp * w21 * (1 - np.tanh(w11 * i)**2))[0][0],
-                (outp * w22 * (1 - np.tanh(w12 * i)**2))[0][0]
-            ]]),
-            np.array([
-                [outp * np.tanh(w11 * i)][0][0],
-                [outp * np.tanh(w12 * i)][0][0]
-            ])
-        ]
-
-    D = np.array(D)
-    d = np.array(d)
-
-    error = np.sum(np.sum(D - d))
-
-    if error == 0.0:
-        p = p + 1
-    else:
-        f = f + 1
-
-    return p, f
     
 if __name__ == '__main__':
-    test1(1, 1, 42)
+    from optimizers import SGD
     np.random.seed(42)
     nn = NeuralNetwork(1)
-    nn.add_layer(10, 'tanh', bias=False)
-    nn.add_layer(20, 'tanh', bias=False)
-    nn.add_layer(20, 'tanh', bias=False)
+    nn.add_layer(3, 'tanh', bias=False)
+    nn.add_layer(5, 'tanh', bias=False)
+    nn.add_layer(5, 'tanh', bias=False)
     nn.add_layer(2, 'sigmoid', bias=False)
 
     optimizer = SGD(learning_rate=0.03)
@@ -296,8 +175,18 @@ if __name__ == '__main__':
     # # nn.add_layer(1, 'sigmoid', bias=False)
     # # print([l['weights'] for l in nn.layers])
 
-    print(nn.predict(np.array([1])))
-    nn.fit(np.array([1]), np.array([0.5, 0.3]), 10)
-    print(nn.predict(np.array([1])))
-    nn.fit(np.array([1]), np.array([0.5, 0.3]), 100)
+    def f(x):
+        x = x[0]
+        return np.array([0.5*x, 0.3*x])
+
+    dpts = 100
+    data = [np.array([np.random.rand()]) for _ in range(dpts)]
+    y = [f(d) for d in data]
+
+    nn.fit(
+        data,
+        y,
+        epochs=1000,
+        batch_size=1
+    )
     print(nn.predict(np.array([1])))
