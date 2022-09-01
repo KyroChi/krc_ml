@@ -105,6 +105,22 @@ class _KNearestNeighbor(object):
         if obj is None:
             raise Exception(msg)
 
+
+class _KNearestNeighborKDTree(object):
+    """ Implementation of k nearest neighbors using a k-d tree instead
+    of simply iterating through the points. Should run in O(log n)
+    instead of O(n) """
+    def __init__(self, k, metric='euclidian'):
+        pass
+
+    def fit(self, X, y):
+        pass
+
+    def predict(self, X):
+        pass
+
+    def _predict(self, x):
+        pass
     
 class KNearestNeighborClassifier(_KNearestNeighbor):
     def __init__(self, k, **kwargs):

@@ -5,6 +5,10 @@ from optimizers import get_optimizer
 from preprocessing import make_batches, sum_matricies
     
 class NeuralNetwork(object):
+    """
+    Implements a feedforward neural network which is trained using 
+    backpropogation.,    
+    """
     def __init__(self, input_size):
         self.layers = []
         self.input_size = input_size
