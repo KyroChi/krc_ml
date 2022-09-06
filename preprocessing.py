@@ -15,14 +15,22 @@ def make_batches(
 
     Z = list(zip(X, y))
 
-    batches = []
+    batch_X = []
+    batch_y = []
+    
     for ii in range(slices):
-        batches.append(
-            Z[ii * batch_size:(ii + 1) * batch_size]
+        batch_X.append(
+            np.array(X[ii * batch_size:(ii + 1) * batch_size])
         )
+        batch_y.append(
+            np.array(y[ii * batch_size:(ii + 1) * batch_size])
+        )
+        
     if len(X) % batch_size != 0:
-        batches.append(X[slices * batch_size:])
-    return batches
+        batch_X.append(np.array(X[slices * batch_size:]))
+        batch_y.append(np.array(y[slices * batch_size:]))
+        
+    return batch_X, batch_y
 
 def sum_matricies(X: list):
     s = X[0]

@@ -3,7 +3,7 @@ from activations import get_activation
 from losses import get_loss
 from optimizers import get_optimizer
 from preprocessing import make_batches, sum_matricies
-    
+
 class NeuralNetwork(object):
     """
     Implements a feedforward neural network which is trained using 
@@ -114,7 +114,8 @@ class NeuralNetwork(object):
             self,
             X, y,
             epochs: int=1,
-            batch_size: int=None
+            batch_size: int=None,
+            verbose=False
     ):
         if not self.compiled:
             raise Exception('Model must be compiled prior to training')
@@ -131,19 +132,20 @@ class NeuralNetwork(object):
         # Handle mini-batching
         if batch_size is None:
             batch_size = len(X)
-        batches = make_batches(X, y, batch_size)
+        batch_X, batch_y = make_batches(X, y, batch_size)
         
         for epoch in range(1, epochs + 1):
-            for batch in batches:
+            for (b_X, b_y) in zip(batch_X, batch_y):
                 batch_derivatives = []
-                for xy in batch:
-                    x, y = xy[0], xy[1]
+                for ii in range(len(b_X)):
+                    x, y = b_X[ii], b_y[ii]
                     # TODO: Vectorize (i.e. run samples all at once)
                     # Batches can be parallized.
                     out, act, ld = self._feed_forward(
                         x, training=True
                     )
                     loss = self.loss(out, y, differentiate=True)
+
                     derivatives = self._back_prop(
                         loss, act, ld
                     )
@@ -156,6 +158,9 @@ class NeuralNetwork(object):
                         layer['weights'], derivatives[ii]
                     )
 
+            if verbose:
+                print('Completed epoch %d' % epoch)
+
         return
 
     def predict(self, X):
@@ -167,11 +172,11 @@ if __name__ == '__main__':
     np.random.seed(42)
     nn = NeuralNetwork(1)
     nn.add_layer(3, 'tanh', bias=False)
-    nn.add_layer(5, 'tanh', bias=False)
-    nn.add_layer(5, 'tanh', bias=False)
+    nn.add_layer(10, 'tanh', bias=False)
+    nn.add_layer(10, 'tanh', bias=False)
     nn.add_layer(2, 'sigmoid', bias=False)
 
-    optimizer = SGD(learning_rate=0.03)
+    optimizer = SGD(learning_rate=0.05)
     nn.compile('mse', optimizer)
 
     # # nn = NeuralNetwork(1)
@@ -183,14 +188,17 @@ if __name__ == '__main__':
         x = x[0]
         return np.array([0.5*x, 0.3*x])
 
-    dpts = 100
+    dpts = 500
     data = [np.array([np.random.rand()]) for _ in range(dpts)]
     y = [f(d) for d in data]
 
     nn.fit(
         data,
         y,
-        epochs=1000,
-        batch_size=1
+        epochs=10,
+        batch_size=1,
+        verbose=True
     )
     print(nn.predict(np.array([1])))
+
+    print(nn.layers[-2]['weights'])
