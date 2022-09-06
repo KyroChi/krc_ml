@@ -57,9 +57,9 @@ class InputLayer(Layer):
 
     def evaluate(self, X, training):
         if training:
-            return X, np.ones(shape=(len(X), 1))
+            return X @ self.weights, np.ones(shape=(len(X), self.output_size))
         else:
-            return X
+            return X @ self.weights
 
     def update(self, *args, **kwargs):
         return
@@ -156,9 +156,12 @@ class Dense(Layer):
             return out
 
     def update(self, delta, prev_activ, optimizer):
+        delta = delta.reshape(1, -1)
+        prev_activ = prev_activ.reshape(1, -1)
+        
         self.bias = optimizer.update(self.bias, delta)
         self.weights = optimizer.update(
-            self.weights, np.matmul(delta, prev_activ.T)
+            self.weights, prev_activ.T @ delta
         )
         
         return
@@ -241,18 +244,22 @@ class Sequential(object):
                 
                 deltas = self._back_prop(loss, activs, lds)
 
-                for dd in deltas:
-                    dd = dd.mean(axis=0)
+                activs.insert(0, b_X)
 
-                for activ in activs:
-                    activ = activ.mean(axis=0)
-
-                # activs.insert(0, b_X)
+                # print('-'*10)
+                # [print(d.shape) for d in reversed(deltas)]
+                # print('-'*10)
+                # [print(a.shape) for a in activs[:-1]]
+                # print('-'*10)
+                # [print(l.bias.shape) for l in self.layers[1:]]
+                # print('-'*10)
+                # [print(l.weights.shape) for l in self.layers]
+                # print('-'*10)
 
                 for layer, delta, activ in zip(
                         self.layers,
                         reversed(deltas),
-                        activs
+                        activs[:-1]
                 ):
                     # Optimizer updates weights
                     layer.update(
@@ -306,7 +313,7 @@ class Sequential(object):
             delta.append(delta_l)
 
         return delta
-    
+
 
 if __name__ == "__main__":
     from optimizers import SGD
@@ -316,32 +323,30 @@ if __name__ == "__main__":
 
     nn = Sequential([
         InputLayer(num_features),
-        Dense(5, activation='tanh'),
-        Dense(5, activation='tanh'),
+        Dense(10, activation='relu'),
         Dense(2, activation='tanh'),
     ])
 
-    optimizer = SGD(learning_rate=0.1)
+    optimizer = SGD(learning_rate=0.3)
     nn.compile('mse', optimizer)
 
     def f(X):
         x, y, z = X
         return np.array([0.5*x + 0.2*y, 0.3*z])
 
-    dpts = 500
+    dpts = 1000
     data = [
         [np.random.rand() for _ in range(num_features)
         ] for _ in range(dpts)]
     y = [f(d) for d in data]
 
-    X_test = [np.array([1, 0.2, 0.1])]
-    print(nn.predict(X_test))
-    
+    X_test = [np.array([1, 0.2, 0.8])]
+
     nn.fit(
         data,
         y,
-        epochs=40,
-        batch_size=1
+        epochs=100,
+        batch_size=16
     )
 
     print(nn.predict(X_test))

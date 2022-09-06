@@ -38,11 +38,19 @@ SIGMOID = Activation(
     )
 )
 
+RELU = Activation(
+    'relu',
+    np.vectorize(lambda x: x if x > 0 else 0),
+    np.vectorize(lambda x: 1 if x > 0 else 0),
+)
+
 def get_activation(activation: str):
     if activation == 'tanh':
         return TANH
     elif activation == 'sigmoid':
         return SIGMOID
+    elif activation == 'relu':
+        return RELU
     elif activation == 'identity':
         return IDENTITY
     else:
